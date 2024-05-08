@@ -1,160 +1,273 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Import libraries
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 
-# C extensions
-*.so
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Read data
+data = pd.read_csv("netflix_titles.csv")
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# Clean and pre-process data
+# 1. Handle missing values (consider dropping rows or imputation techniques)
+data.dropna(subset=["listed_in"], inplace=True)  # Drop rows with missing genre data
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# 2. Convert release_year to numeric
+data["release_year"] = pd.to_numeric(data["release_year"], errors="coerce")  # Handle non-numeric values
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+# 3. Encode categorical variables (listed_in)
+le = LabelEncoder()
+data["listed_in_encoded"] = le.fit_transform(data["listed_in"].str.split(",").str.join("|"))  # Combine genres into single string
 
-# Translations
-*.mo
-*.pot
+# 4. Feature selection (consider including additional features like rating or duration)
+features = ["release_year", "listed_in_encoded"]
+X = data[features]
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# K-Means Clustering for Demand Forecasting 
+# You can explore other models like Time Series or Collaborative Filtering
+kmeans = KMeans(n_clusters=5)  # Adjust number of clusters (k) based on analysis
+kmeans.fit(X)
 
-# Flask stuff:
-instance/
-.webassets-cache
+# Assign cluster labels to data
+data["cluster_label"] = kmeans.labels_
 
-# Scrapy stuff:
-.scrapy
+# Analyze clusters and forecast demand (further steps needed)
+# - Analyze the content within each cluster (listed_in, potentially description)
+# - Identify trends within clusters over time (requires viewership data)
+# - Use cluster insights to inform content acquisition strategies for different demand segments
 
-# Sphinx documentation
-docs/_build/
+data.head()  # Display the first few rows of the cleaned data
 
-# PyBuilder
-.pybuilder/
-target/
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Analyze Clusters:
 
-# IPython
-profile_default/
-ipython_config.py
+# Use the listed_in and potentially description columns to understand the types of shows/movies in each cluster.
+# Look for patterns or themes within each cluster. For example, Cluster 0 might contain mostly stand-up comedies (based on the sample data).
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+# Analyze cluster content
+for cluster_label in data["cluster_label"].unique():
+  cluster_data = data[data["cluster_label"] == cluster_label]
+  
+  # Analyze listed_in genres
+  listed_in_counts = cluster_data["listed_in"].value_counts()
+  print(f"\nCluster {cluster_label} - Listed In:")
+  print(listed_in_counts.nlargest(10))  # Show top 10 most frequent genres
+  
+  # Sample descriptions (optional)
+  descriptions = cluster_data["description"].sample(5)  # Sample 5 descriptions
+  print(f"\nCluster {cluster_label} - Sample Descriptions:")
+  for description in descriptions:
+      print(description)
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/#use-with-ide
-.pdm.toml
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
 
-# SageMath parsed files
-*.sage.py
+from sklearn.feature_extraction.text import TfidfVectorizer
+# Preprocess descriptions (optional but recommended)
+def preprocess_text(text):
+  # Lowercase text
+  text = text.lower()
+  # Remove punctuation
+  text = "".join([char for char in text if char.isalnum() or char.isspace()])
+  # Remove stop words (optional)
+  # from nltk.corpus import stopwords  # Uncomment if using stopwords
+  # stop_words = stopwords.words("english")
+  # text = " ".join([word for word in text.split() if word not in stop_words])
+  return text
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Apply preprocessing (if desired)
+data["description"] = data["description"].apply(preprocess_text)
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Prepare descriptions for TF-IDF
+descriptions = data["description"].tolist()
 
-# Rope project settings
-.ropeproject
+# Create TF-IDF vectorizer
+vectorizer = TfidfVectorizer(max_features=100)  # Adjust number of features
 
-# mkdocs documentation
-/site
+# Fit the vectorizer on the descriptions
+tfidf_matrix = vectorizer.fit_transform(descriptions)
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Analyze TF-IDF for each cluster
+for cluster_label in data["cluster_label"].unique():
+  cluster_data = data[data["cluster_label"] == cluster_label]
+  cluster_descriptions = cluster_data["description"].tolist()
+  cluster_tfidf = tfidf_matrix[cluster_data.index]
+  
+  # Get top features (keywords) for this cluster
+  top_features_indices = cluster_tfidf.sum(axis=0).argsort()[-10:]  # Get top 10 indices
+  top_features = vectorizer.get_feature_names_out()[top_features_indices]
+  print(f"\nCluster {cluster_label} - Top Keywords:")
+  for feature in top_features:
+      print(feature)
 
-# Pyre type checker
-.pyre/
 
-# pytype static type analyzer
-.pytype/
 
-# Cython debug symbols
-cython_debug/
+# Top genres within the cluster (using listed_in for illustration)
+top_genres = cluster_data["listed_in"].value_counts().nlargest(5)
+  
+  # Print insights for this cluster
+print(f"\nCluster {cluster_label}:")
+print("Top Genres:", top_genres)
+  
+  # Prioritize acquisitions based on theme and external indicators (replace with your logic)
+  # Consider incorporating insights from external research, user data (if available), 
+  # and A/B testing results to refine content acquisition decisions.
+print("Prioritize acquiring content considering top genres and external demand indicators.")
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+"""Top Observations:
+Action & Adventure is Dominant: The "listed_in" breakdown highlights Action & Adventure as the most prominent genre within Cluster 2, often combined with other genres like Drama, International, Sci-Fi & Fantasy, and Comedy.
+
+External Demand Indicators:
+Consider researching popular action subgenres within your target market. Look at trends for genres like:
+Military Action
+Spy Thrillers
+Historical Epics
+Superhero Films
+Martial Arts Films
+Research the popularity of international action movies within your target region.
+
+Refined Acquisition Strategy:
+Prioritize acquiring Action & Adventure content, particularly when combined with other appealing genres like Drama, Sci-Fi & Fantasy, or Comedy (depending on your target audience's preferences).
+Focus on international action movies that cater to your target region's tastes. Research popular international action stars or filmmaking styles that resonate with your audience. """
+
+# Filter data for Cluster 4
+cluster_2_data = cluster_data[cluster_data["cluster_label"] == 4]
+
+# Genre counts within Cluster 4
+genre_counts = cluster_2_data["listed_in"].value_counts().nlargest(6)  # Get top 6
+
+# Prepare data for visualization
+genres = genre_counts.index.tolist()
+counts = genre_counts.tolist()
+
+# Create bar chart
+plt.figure(figsize=(8, 6))  # Adjust figure size as desired
+plt.bar(genres, counts)
+plt.xlabel("Genre")
+plt.ylabel("Number of Shows/Movies")
+plt.title("Top 6 Genres in Cluster 2")
+
+# Highlight Action & Adventure bar (if it's among top 6)
+if "Action & Adventure" in genres:
+  action_index = genres.index("Action & Adventure")
+  plt.bar(action_index, counts[action_index], color='skyblue', label='Action & Adventure')
+plt.legend()
+
+plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for readability
+plt.tight_layout()
+
+# Save or display the chart
+# plt.savefig("cluster_2_top_6_genres.png")  # Uncomment to save the chart as an image
+plt.show()
+
+# Filter data for Cluster 4
+cluster_2_data = cluster_data[cluster_data["cluster_label"] == 4]
+
+# Genre counts within Cluster 4
+genre_counts = cluster_2_data["listed_in"].value_counts().nlargest(6)  # Get top 6
+
+# Prepare data for visualization
+genres = genre_counts.index.tolist()
+counts = genre_counts.tolist()
+
+# Create bar chart
+plt.figure(figsize=(8, 6))  # Adjust figure size as desired
+plt.bar(genres, counts)
+plt.xlabel("Genre")
+plt.ylabel("Number of Shows/Movies")
+plt.title("Top 6 Genres in Cluster 2")
+
+# Highlight Action & Adventure bar (if it's among top 6)
+if "Action & Adventure" in genres:
+  action_index = genres.index("Action & Adventure")
+  plt.bar(action_index, counts[action_index], color='skyblue', label='Action & Adventure')
+plt.legend()
+
+plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for readability
+plt.tight_layout()
+
+# Save or display the chart
+# plt.savefig("cluster_2_top_6_genres.png")  # Uncomment to save the chart as an image
+plt.show()
+
+
+from wordcloud import WordCloud
+
+# Import libraries (assuming you have wordcloud installed)
+
+# Prepare genre counts data (similar to previous visualizations)
+
+# Create the word cloud object with font size and color options based on genre counts
+wordcloud = WordCloud(
+    background_color="white",
+    max_words=200,
+    relative_scaling=0.6  # Optional: Specify a custom font (replace with path)
+).generate(" ".join(genre_counts.index * genre_counts.values))  # Repeat genres based on counts
+
+# Color function based on genre counts (replace with your logic)
+def color_func(word, font_size, position, random_state=None):
+  count = genre_counts.get(word, 0)  # Get count for the genre
+  color = 'black'  # Default color
+  if count > 10:  # Adjust threshold for prominent genres (replace with your criteria)
+    color = 'red'  # Example color for prominent genres
+  return color
+
+
+
+# Display the word cloud
+plt.figure(figsize=(10, 8))
+plt.imshow(wordcloud)
+plt.axis("off")
+plt.title("Genre Distribution in Cluster 4")
+plt.show()
+%pip install pycountry
+%pip install seaborn
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Define top genres and counts (replace with your actual data)
+top_genres = [
+    "Action & Adventure, Dramas, International Movies",
+    "Action & Adventure, International Movies",
+    "Action & Adventure",
+    "Action & Adventure, Comedies, International Movies",
+    "Action & Adventure, Sci-Fi & Fantasy",
+]
+genre_counts = [103, 75, 68, 57, 49]
+
+# Create a dummy DataFrame (modify as needed)
+data = {'genre': top_genres, 'count': genre_counts, 'rating': [0 for _ in genre_counts]}  # Assuming initial rating = 0
+df = pd.DataFrame(data)
+
+# Reduce data points (consider filtering or grouping genres)
+# This is an example, adjust based on your needs
+filtered_df = df.iloc[:6]  # Show only the top 3 genres
+
+# Pivot table for heatmap
+pivot_table = filtered_df.pivot_table(values='rating', index='genre', columns='genre', aggfunc='mean')  # Assuming square heatmap
+
+# Create the heatmap with increased font size and spacing
+plt.figure(figsize=(15, 10))  # Adjust figure size for better readability
+sns.heatmap(pivot_table, cmap='YlGnBu', annot=True, fmt=".1f", linewidths=0.2, annot_kws={"fontsize": 8})  # Increase annotation font size
+plt.tick_params(labelsize=8)  # Increase axis tick label size
+plt.title('Content Acquisition Prioritization (Top Genres)', fontsize=10)  # Increase title font size
+plt.xlabel('Genre', fontsize=8)
+plt.ylabel('Genre', fontsize=8)
+plt.xticks(rotation=45)  # Rotate genre names if needed
+
+# Add comments or markers to indicate content diversity (example)
+for idx, row in filtered_df.iterrows():
+  comment = f"Count: {row['count']}"  # Example comment based on count
+  plt.annotate(comment, (idx, idx), xytext=(15, -15), textcoords='offset points', fontsize=5, color='red')
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
